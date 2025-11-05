@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SDN NIDPS{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Statistics Cards -->
+    <div class="col-md-3 mb-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-exclamation-triangle"></i> Active Threats</h5>
+                <h2 id="active-threats">0</h2>
+                <small>Real-time threat count</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-network-wired"></i> Active Flows</h5>
+                <h2 id="active-flows">0</h2>
+                <small>OpenFlow rules installed</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-ban"></i> Blocked IPs</h5>
+                <h2 id="blocked-ips">0</h2>
+                <small>IP addresses blocked</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-server"></i> Switches</h5>
+                <h2 id="switch-count">0</h2>
+                <small>Connected switches</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Real-time Alerts -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5><i class="fas fa-bell"></i> Recent Alerts</h5>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <div id="alerts-list">
+                    <p class="text-muted">No recent alerts</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Traffic Chart -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-area"></i> Traffic Overview</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="trafficChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Threat Timeline -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> Threat Detection Timeline</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="threatTimeline"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- System Metrics -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tachometer-alt"></i> System Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label>CPU Usage</label>
+                    <div class="progress">
+                        <div id="cpu-progress" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label>Memory Usage</label>
+                    <div class="progress">
+                        <div id="memory-progress" class="progress-bar bg-warning" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label>Detection Latency</label>
+                    <p id="detection-latency">0 ms</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Attack Types Distribution -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie"></i> Attack Types</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="attackTypesChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
