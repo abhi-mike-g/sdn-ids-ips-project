@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}System Metrics - SDN NIDPS{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title text-muted">CPU Usage</h6>
+                <div id="cpu-gauge" style="height: 150px;"></div>
+                <h4 id="cpu-value" class="text-center">0%</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title text-muted">Memory Usage</h6>
+                <div id="memory-gauge" style="height: 150px;"></div>
+                <h4 id="memory-value" class="text-center">0%</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title text-muted">Detection Latency</h6>
+                <div id="latency-gauge" style="height: 150px;"></div>
+                <h4 id="latency-value" class="text-center">0 ms</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title text-muted">Throughput</h6>
+                <div id="throughput-gauge" style="height: 150px;"></div>
+                <h4 id="throughput-value" class="text-center">0 Mbps</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>CPU Usage Over Time</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="cpuHistoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Memory Usage Over Time</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="memoryHistoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Network Traffic</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="networkChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Detection Latency</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="latencyChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
+{% endblock %}
