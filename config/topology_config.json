@@ -1,0 +1,39 @@
+{
+  "topologies": {
+    "simple": {
+      "name": "Simple Test Topology",
+      "description": "Small network for testing",
+      "switches": 2,
+      "hosts_per_switch": 2,
+      "controller_ip": "127.0.0.1",
+      "controller_port": 6653
+    },
+    "realistic": {
+      "name": "Realistic Topology with External Attacker",
+      "description": "Simulates real-world attack scenario",
+      "core_switches": 1,
+      "edge_switches": 2,
+      "hosts_per_switch": 3,
+      "has_external_attacker": true,
+      "controller_ip": "127.0.0.1",
+      "controller_port": 6653
+    },
+    "scalable": {
+      "name": "Scalable Fat-Tree Topology",
+      "description": "Demonstrates scalability",
+      "k": 4,
+      "total_hosts": 16,
+      "total_switches": 20,
+      "controller_ip": "127.0.0.1",
+      "controller_port": 6653
+    }
+  },
+  "network_settings": {
+    "controller_openflow_version": "OpenFlow13",
+    "link_bandwidth": "100Mbps",
+    "host_ip_base": "10.0.0.0/8",
+    "external_network": "203.0.113.0/24",
+    "enable_arp": true,
+    "enable_icmp": true
+  }
+}
