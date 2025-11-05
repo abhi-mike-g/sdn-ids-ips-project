@@ -364,4 +364,3 @@ Current API Version: 1.0
 6. Implement retry logic for failed requests
 7. Monitor API usage and performance
 8. Keep API keys secure
-```
