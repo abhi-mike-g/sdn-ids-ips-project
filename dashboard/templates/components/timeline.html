@@ -1,0 +1,36 @@
+<!-- dashboard/templates/components/timeline.html -->
+<div class="attack-timeline">
+    <div id="timeline-chart"></div>
+    <script>
+        const ctx = document.getElementById('timeline-chart');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Threats Detected',
+                    data: [],
+                    borderColor: 'rgb(255, 99, 132)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                animation: {
+                    duration: 0
+                }
+            }
+        });
+        
+        // Real-time update via WebSocket
+        socket.on('new_threat', function(data) {
+            chart.data.labels.push(new Date().toLocaleTimeString());
+            chart.data.datasets[0].data.push(data.count);
+            chart.update();
+        });
+    </script>
+</div>
