@@ -1,7 +1,3 @@
-
-## 53. API Documentation (docs/API_DOCS.md)
-
-```markdown
 # SDN-NIDPS REST API Documentation
 
 ## Base URL
