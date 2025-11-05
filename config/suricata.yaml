@@ -1,0 +1,105 @@
+%YAML 1.1
+---
+# Suricata Configuration for SDN-NIDPS
+
+# Global settings
+global:
+  http-body-inline: auto
+  exception-policy: drop_all
+
+# Logging configuration
+logging:
+  default-log-level: notice
+  default-output-level: notice
+  
+  outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert
+        - http
+        - dns
+        - tls
+        - files
+        - flow
+        - smtp
+        - ssh
+        - stats
+
+# Packet acquisition
+af-packet:
+  - interface: any
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    use-mmap: yes
+
+# IP reputation
+reputation:
+  enabled: no
+
+# Network monitoring
+host-os-policy:
+  windows: [0.0.0.0/0]
+
+# Performance
+threading:
+  set-cpu-affinity: no
+  cpu-affinity:
+    - management-cpu-set:
+        cpu: [0]
+  detect-thread-ratio: 1.5
+
+# Protocols
+stream:
+  memcap: 64mb
+  checksum-validation: yes
+  inline: auto
+  midstream: false
+  reassembly:
+    memcap: 256mb
+    depth: 1mb
+    toserver-chunk-size: 2560
+    toclient-chunk-size: 2560
+
+# HTTP parser
+http:
+  libhtp:
+    default:
+      address-space-hardening: conservative
+      personality: IDS
+
+# DNS parser
+dns:
+  requests-flood: true
+
+# TCP/UDP settings
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+    ssh:
+      enabled: yes
+    http:
+      enabled: yes
+    dns:
+      enabled: yes
+
+# Rule files
+rule-files:
+  - suricata.rules
+  - custom.rules
+
+# Output settings
+outputs:
+  - eve-log:
+      enabled: yes
+      filename: /var/log/suricata/eve.json
+      types:
+        - alert
+        - flow
+
+# Default rule action
+default-rule-path: /etc/suricata/rules
