@@ -1,0 +1,141 @@
+# Custom Detection Rules for SDN-NIDPS
+# Format: Suricata/Snort compatible rules
+
+# ==========================
+# 1. Reconnaissance Attacks
+# ==========================
+
+# Port Scan Detection - Multiple connections to different ports
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"Port Scan Detected"; flow:to_server; flags:S; threshold: type by_src, track by_src, count 20, seconds 60; classtype:attempted-recon; sid:1000001; rev:1;)
+
+# Network Sweep
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (msg:"ICMP Network Sweep"; icmp_type:8; threshold: type by_src, track by_src, count 100, seconds 60; classtype:attempted-recon; sid:1000002; rev:1;)
+
+# OS Fingerprinting Attempt
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"OS Fingerprinting - Nmap Scan"; flow:to_server; content:"HTTP"; http_header; content:"Nmap"; fast_pattern; classtype:attempted-recon; sid:1000003; rev:1;)
+
+# ==========================
+# 2. Denial of Service
+# ==========================
+
+# SYN Flood
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SYN Flood Attack"; flow:to_server; flags:S; threshold: type by_src, track by_src, count 100, seconds 10; classtype:denial-of-service; sid:1001001; rev:1;)
+
+# UDP Flood
+alert udp $EXTERNAL_NET any -> $HOME_NET any (msg:"UDP Flood Attack"; threshold: type by_src, track by_src, count 100, seconds 10; classtype:denial-of-service; sid:1001002; rev:1;)
+
+# ICMP Flood
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (msg:"ICMP Flood Attack"; icmp_type:8; threshold: type by_src, track by_src, count 100, seconds 10; classtype:denial-of-service; sid:1001003; rev:1;)
+
+# Slowloris Attack
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Slowloris DoS Attack"; content:"Connection|3a|"; http_header; content:"Keep-Alive"; http_header; threshold: type by_src, track by_src, count 50, seconds 300; classtype:denial-of-service; sid:1001004; rev:1;)
+
+# ==========================
+# 3. Web Application Attacks
+# ==========================
+
+# SQL Injection - Common Payloads
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"SQL Injection Attempt"; content:"union"; http_uri; nocase; pcre:"/select|insert|delete|drop|update|union/i"; classtype:web-application-attack; sid:1002001; rev:1;)
+
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"SQL Injection - OR 1=1"; content:"1' OR '1'='1"; http_uri; classtype:web-application-attack; sid:1002002; rev:1;)
+
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"SQL Injection - Comment Bypass"; content:"--"; http_uri; classtype:web-application-attack; sid:1002003; rev:1;)
+
+# Cross-Site Scripting (XSS)
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"XSS Attempt - Script Tag"; content:"<script"; http_uri; nocase; classtype:web-application-attack; sid:1002004; rev:1;)
+
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"XSS Attempt - Event Handler"; pcre:"/(onclick|onerror|onload|onmouseover|onfocus|onblur|onchange|onsubmit)\s*=/i"; http_uri; classtype:web-application-attack; sid:1002005; rev:1;)
+
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"XSS Attempt - JavaScript Protocol"; content:"javascript:"; http_uri; classtype:web-application-attack; sid:1002006; rev:1;)
+
+# Command Injection
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Command Injection Attempt"; pcre:"/(\||&|;|\`|\$\(|`)/"; http_uri; classtype:web-application-attack; sid:1002007; rev:1;)
+
+# Path Traversal
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Path Traversal Attack"; content:"../"; http_uri; classtype:web-application-attack; sid:1002008; rev:1;)
+
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Path Traversal - Encoded"; content:"%2e%2e"; http_uri; classtype:web-application-attack; sid:1002009; rev:1;)
+
+# ==========================
+# 4. Authentication Attacks
+# ==========================
+
+# Brute Force - SSH
+alert ssh $EXTERNAL_NET any -> $HOME_NET 22 (msg:"SSH Brute Force Attempt"; threshold: type by_src, track by_src, count 10, seconds 60; classtype:attempted-admin; sid:1003001; rev:1;)
+
+# Brute Force - HTTP
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"HTTP Brute Force"; content:"POST"; http_method; content:"Authorization|3a|"; http_header; threshold: type by_src, track by_src, count 20, seconds 60; classtype:attempted-admin; sid:1003002; rev:1;)
+
+# Credential Stuffing
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Credential Stuffing Attack"; flow:established; content:"POST"; http_method; content:"login"; http_uri; threshold: type by_src, track by_src, count 50, seconds 300; classtype:attempted-admin; sid:1003003; rev:1;)
+
+# ==========================
+# 5. Man-in-the-Middle Attacks
+# ==========================
+
+# ARP Spoofing Detection
+alert arp $EXTERNAL_NET any -> $HOME_NET any (msg:"ARP Spoofing Attempt"; arp.opcode:reply; arp.duplicate_arp_response; classtype:attempted-recon; sid:1004001; rev:1;)
+
+# DNS Spoofing
+alert dns $EXTERNAL_NET any -> $HOME_NET 53 (msg:"DNS Spoofing Attempt"; content:"|00|"; offset:2; depth:2; classtype:attempted-recon; sid:1004002; rev:1;)
+
+# ==========================
+# 6. Malware/Exploit Detection
+# ==========================
+
+# Suspicious Binary Download
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Executable Download"; content:".exe"; http_uri; classtype:suspicious-file-transfer; sid:1005001; rev:1;)
+
+# Metasploit Beacon
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"Metasploit Reverse Shell Connection"; flow:established; flags:PA; content:"ReflectiveDllInjection"; classtype:malware-cnc; sid:1005002; rev:1;)
+
+# ==========================
+# 7. Protocol Anomalies
+# ==========================
+
+# HTTP Response Splitting
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"HTTP Response Splitting"; content:"%0d%0a%0d%0a"; http_uri; classtype:web-application-attack; sid:1006001; rev:1;)
+
+# Invalid HTTP Version
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"Invalid HTTP Version"; pcre:"/HTTP\/[^1]/"; classtype:protocol-command-decode; sid:1006002; rev:1;)
+
+# ==========================
+# 8. IoT/MQTT Specific
+# ==========================
+
+# MQTT Injection
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"MQTT Malicious Payload"; content:"union"; classtype:web-application-attack; sid:1007001; rev:1;)
+
+# Unauthorized MQTT Connection
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"Unauthorized MQTT Connection"; flags:S; threshold: type by_src, track by_src, count 10, seconds 60; classtype:attempted-user; sid:1007002; rev:1;)
+
+# ==========================
+# 9. Zero-Day/Suspicious Patterns
+# ==========================
+
+# Large Data Exfiltration
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"Possible Data Exfiltration"; flow:established; content:!"POST"; http_method; threshold: type by_src, track by_src, count 100, seconds 300; classtype:policy-violation; sid:1008001; rev:1;)
+
+# Reverse Shell Activity
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"Possible Reverse Shell"; flow:established; content:"bash"; classtype:suspicious-login; sid:1008002; rev:1;)
+
+# ==========================
+# 10. Custom Behavioral Rules
+# ==========================
+
+# High Volume Traffic Pattern
+alert tcp $HOME_NET any -> any any (msg:"Abnormal Network Activity - High Traffic Volume"; threshold: type by_src, track by_src, count 1000, seconds 10; classtype:policy-violation; sid:1009001; rev:1;)
+
+# Unusual Port Access
+alert tcp $EXTERNAL_NET any -> $HOME_NET 12345 (msg:"Suspicious Port Access"; classtype:suspicious-traffic; sid:1009002; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HOME_NET 4444 (msg:"Metasploit Default Port"; classtype:attempted-admin; sid:1009003; rev:1;)
+
+# ==========================
+# Variables Definition
+# ==========================
+
+# These variables should be defined in suricata.yaml
+# $HOME_NET - internal network range
+# $EXTERNAL_NET - external network range
+# $HTTP_PORTS - HTTP ports (80, 8080, etc.)
