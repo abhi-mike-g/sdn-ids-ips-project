@@ -281,5 +281,3 @@ For issues and questions:
   * Mininet Network Simulator
 
 -----
-
-Would you like to explore the specifics of one of the attack scenarios or perhaps the details of the **Policy Enforcer** component?
