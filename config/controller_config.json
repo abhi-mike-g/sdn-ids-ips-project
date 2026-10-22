@@ -1,9 +1,11 @@
 {
   "controller": {
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 6653,
     "wsgi_port": 8080,
-    "name": "SDN-NIDPS-Controller"
+    "name": "SDN-NIDPS-Controller",
+    "api_host": "127.0.0.1",
+    "api_url": "http://127.0.0.1:8080"
   },
   "database": {
     "url": "sqlite:///logs/nidps.db",
@@ -11,23 +13,25 @@
     "echo": false
   },
   "suricata": {
-    "eve_log": "/var/log/suricata/eve.json",
+    "eve_log": "logs/suricata/eve.json",
     "rules_path": "/etc/suricata/rules",
     "enabled": true,
-    "update_interval": 3600
+    "update_interval": 3600,
+    "interface": "s1-eth2"
   },
   "dashboard": {
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 5000,
     "debug": false,
     "threaded": true
   },
   "detection": {
-    "enable_ml": true,
+    "enable_ml": false,
     "model_path": "models/traffic_classifier.pkl",
     "threshold": 0.7,
     "port_scan_threshold": 10,
-    "connection_threshold": 100
+    "connection_threshold": 100,
+    "inspect_all_packets": true
   },
   "monitoring": {
     "metrics_interval": 5,
@@ -49,7 +53,10 @@
     "auto_block_critical": true,
     "block_duration": 3600,
     "rate_limit_enabled": true,
-    "max_packets_per_second": 10000
+    "max_packets_per_second": 10000,
+    "protected_ips": [
+      "10.0.0.254"
+    ]
   },
   "logging": {
     "level": "INFO",
@@ -57,5 +64,10 @@
     "log_file": "logs/nidps.log",
     "max_bytes": 10485760,
     "backup_count": 5
+  },
+  "orchestrator": {
+    "enabled": true,
+    "api_url": "http://127.0.0.1:5001",
+    "api_port": 5001
   }
 }

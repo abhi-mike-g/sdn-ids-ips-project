@@ -1,7 +1,7 @@
-from ryu.ofproto import ofproto_v1_3
 from ..utils.logger import setup_logger
 from ..database.database import db
 import json
+from datetime import datetime, timedelta
 
 logger = setup_logger('flow_manager')
 
@@ -9,12 +9,12 @@ class FlowManager:
     def __init__(self):
         self.flows = {}  # {datapath_id: {flow_id: flow_data}}
         
-    def install_flow(self, datapath, priority, match, actions, idle_timeout=0, hard_timeout=0):
+    def install_flow(self, datapath, priority, match, actions, idle_timeout=0, hard_timeout=0, instructions=None):
         """Install flow rule on switch"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        inst = instructions if instructions is not None else [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         
         mod = parser.OFPFlowMod(
             datapath=datapath,
@@ -33,7 +33,8 @@ class FlowManager:
             'priority': priority,
             'match_fields': json.dumps(match.to_jsondict()),
             'actions': json.dumps([str(a) for a in actions]),
-            'active': True
+            'active': True,
+            'expires_at': datetime.utcnow() + timedelta(seconds=hard_timeout) if hard_timeout else None
         }
         flow_id = db.insert_flow_rule(flow_data)
         
@@ -54,6 +55,7 @@ class FlowManager:
         )
         
         datapath.send_msg(mod)
+        db.deactivate_flows(datapath.id, json.dumps(match.to_jsondict()) if match is not None else None)
         logger.info(f"Flow deleted on switch {datapath.id}")
     
     def get_flow_stats(self, datapath):

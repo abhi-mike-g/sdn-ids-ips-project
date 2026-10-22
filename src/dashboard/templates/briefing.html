@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Project Briefing - SDN NIDPS{% endblock %}
+{% block content %}
+<div class="row"><div class="col-12 mb-3">
+    <h1>Project briefing</h1>
+    <p class="section-lead">A concise walkthrough of the problem, the design choices, and what this demonstration does and does not establish.</p>
+</div></div>
+<div class="row g-3 mb-4">
+    <div class="col-lg-4"><article class="card h-100"><div class="card-body">
+        <h2 class="h5">Why this problem matters</h2>
+        <p>Detection systems can identify suspicious traffic but leave response to a separate operator or tool. In a switched network, a slow response gives an attacker time to move between services, while manual per-switch changes are inconsistent and hard to audit.</p>
+        <p class="mb-0">This project demonstrates a local pipeline from packet inspection to a correlated incident and a time-bounded network policy, with analyst review and protected infrastructure addresses.</p>
+    </div></article></div>
+    <div class="col-lg-4"><article class="card h-100"><div class="card-body">
+        <h2 class="h5">What is distinctive here</h2>
+        <ul><li>Suricata signatures feed an incident engine rather than triggering isolated responses.</li>
+            <li>Alerts are grouped by source, enriched with STRIDE and MITRE ATT&amp;CK references, and given a readable response rationale.</li>
+            <li>OS-Ken applies OpenFlow rules across connected switches; the dashboard exposes topology, flows, evidence, and analyst decisions.</li>
+            <li>A protected-IP allowlist and expiring rules reduce the risk of blocking essential infrastructure indefinitely.</li></ul>
+        <p class="mb-0">The contribution is the explainable integration and demonstration workflow; this is a prototype, not a claim of novel detection algorithms or production-grade efficacy.</p>
+    </div></article></div>
+    <div class="col-lg-4"><article class="card h-100"><div class="card-body">
+        <h2 class="h5">How to read this demo</h2>
+        <p>The offline mode replays a small, labelled set of EVE-style records. Its topology and flows are simulated from those records. Proposed responses are explicitly marked simulated; they do not block packets.</p>
+        <p class="mb-0">The live lab connects Mininet, Suricata, OS-Ken, and the orchestrator. Controller submission is not proof of packet loss: verify the switch flow table and traffic behavior in the isolated lab.</p>
+    </div></article></div>
+</div>
+<article class="card mb-4"><div class="card-header"><h2 class="h5">Scenario and defense rationale</h2></div>
+<div class="table-responsive"><table class="table table-striped mb-0"><thead><tr><th>Scenario in replay</th><th>Evidence shown</th><th>Defense decision</th><th>Limit to keep in mind</th></tr></thead><tbody>
+<tr><td>Port/service reconnaissance</td><td>Distinct destinations and ports, including SSH, SMB, RDP, and HTTPS.</td><td>Suricata recon signature; source-based correlation; rate limit or block only when severity and confidence pass policy thresholds.</td><td>A signature is not a complete scan detector. Validate thresholds against representative traffic.</td></tr>
+<tr><td>UDP flood pattern</td><td>Repeated UDP alerts directed at DNS/53.</td><td>Suricata volume threshold; OpenFlow meter can constrain a source; block policy is reserved for stronger evidence.</td><td>The replay illustrates alert handling, not a measured capacity or service impact.</td></tr>
+<tr><td>SSH authentication abuse</td><td>Repeated SSH alerts to TCP/22.</td><td>Correlate attempts from one actor and apply an expiring source policy when evidence is strong.</td><td>Network controls complement account lockout, MFA, and SSH hardening; they do not replace them.</td></tr>
+<tr><td>Web attacks: SQL injection, XSS, command injection, traversal</td><td>HTTP alert records aimed at ports 80/8080.</td><td>Application-layer signatures identify known patterns; the SDN layer can contain the source across switches.</td><td>Signatures cannot prove exploitability or cover every encoding. Secure application queries and output handling remain necessary.</td></tr>
+<tr><td>MQTT and DNS anomalies</td><td>Unauthorized MQTT activity to 1883 and a DNS spoofing alert to 53.</td><td>Protocol signatures add coverage beyond web and flood scenarios; incidents preserve target and port context.</td><td>The fixture is illustrative. Real deployments need protocol-specific baselines and validated rules.</td></tr>
+</tbody></table></div></article>
+<article class="card mb-4"><div class="card-header"><h2 class="h5">Why these scenarios and controls</h2></div><div class="card-body">
+<p>The project includes lab-oriented port-scan, SYN/UDP/ICMP flood, SSH/HTTP credential, SQL-injection, and ARP-spoofing modules. The replay intentionally models only a safe set of alert records; it does not run those scripts or generate attack traffic. The selected records span reconnaissance, availability, authentication, application-layer, IoT, and name-resolution cases so reviewers can trace how different evidence is handled.</p>
+<p>Controls are chosen by evidence strength and network scope: signatures identify known patterns; correlation groups related records by source; protected addresses prevent self-inflicted outages; lower-confidence or medium-severity activity is monitored or rate-limited; stronger evidence can trigger a bounded source block; and analyst actions can resolve or suppress false positives. The rate limiter uses switch meters, while blocks use expiring IPv4 source rules.</p>
+<p class="mb-0"><strong>Practical boundary:</strong> network containment can reduce lateral reach, but it does not fix vulnerable applications, replace MFA or account lockout, or establish that a rule is accurate. Validate each policy in the isolated live lab before relying on it.</p>
+</div></article>
+<div class="alert alert-info"><strong>Evaluation plan:</strong> demonstrate each scenario in the isolated lab, inspect the matching EVE record and incident rationale, verify the submitted flow on every switch, then compare before/after connectivity. Report precision, recall, false positives, and mitigation time only after testing against labelled traffic; the demo does not claim those measured results.</div>
+{% endblock %}

@@ -1,283 +1,40 @@
-# SDN-Based Scalable Network Intrusion Detection & Prevention System (NIDPS)
+# SDN-NIDPS
 
-An advanced cybersecurity system combining Software-Defined Networking (SDN) with threat modeling and real-time intrusion detection/prevention capabilities.
+An educational SDN intrusion detection and prevention project. It combines an OS-Ken OpenFlow 1.3 controller, Suricata EVE alerts, SQLite persistence, an incident API, and a Flask dashboard.
 
------
+## Run the no-network demo
 
-## Features
-
-  * **Real-time Threat Detection**: Leveraging Suricata IDS and machine learning
-  * **Automated Threat Response**: Dynamic policy enforcement through SDN
-  * **Threat Modeling Integration**: Microsoft Threat Modeling Tool integration (STRIDE)
-  * **Scalable Architecture**: Support for large network deployments
-  * **Comprehensive Dashboard**: Real-time visualization and monitoring
-  * **Attack Simulation**: Built-in attack scenarios for testing and demonstration
-  * **Multi-layer Detection**: Signature-based, anomaly-based, and ML-based detection
-
------
-
-## System Requirements
-
-  * **OS**: Ubuntu 20.04 LTS or later
-  * **Python**: Python 3.8+
-  * **RAM**: 4GB minimum (**8GB recommended**)
-  * **Disk**: 10GB for database and logs
-  * **Network**: Standard network interface for testing
-
------
-
-## Quick Start
-
-### 1\. Installation
+Python 3.10–3.12 is recommended. The offline replay uses no Mininet, switch, or packet-capture privileges and never applies live blocking:
 
 ```bash
-git clone <repository-url>
-cd sdn-nidps-project
-sudo bash scripts/setup_environment.sh
-```
-
-### 2\. Configuration
-
-Edit `config/controller_config.json` for your environment:
-
-```json
-{
-  "controller": {
-    "host": "0.0.0.0",
-    "port": 6653
-  },
-  "database": {
-    "url": "sqlite:///logs/nidps.db"
-  }
-}
-```
-
-### 3\. Start System
-
-```bash
-sudo bash scripts/start_system.sh
-```
-
-### 4\. Access Dashboard
-
-Open browser and navigate to: `http://localhost:5000`
-
-### 5\. Run Demo
-
-```bash
+bash scripts/setup_environment.sh --demo
+bash scripts/run_demo.sh --check
 bash scripts/run_demo.sh
 ```
 
------
+Open `http://127.0.0.1:5000`. The replay uses `orchestrator/demo_scenarios.jsonl`; it includes reconnaissance, UDP, SSH, web, MQTT, and DNS alert records across multiple lab hosts. The topology and flows are simulated from those records, and incident actions are marked simulated. Press Ctrl-C to stop the dashboard. Use `--replay FILE` to load another Suricata EVE JSONL file.
 
-## Architecture
+## Run the live isolated lab
 
-### Components
-
-1.  **Ryu SDN Controller**: Manages network switches and flow rules
-2.  **Suricata IDS**: Network-based intrusion detection
-3.  **Threat Detector**: Real-time threat analysis engine
-4.  **Policy Enforcer**: Automated response mechanisms
-5.  **Dashboard**: Web-based monitoring interface
-6.  **Attack Simulator**: Testing and demonstration tools
-
-### Data Flow
-
-```text
-Network Traffic → Suricata IDS → Threat Detector → Policy Enforcer → Flow Rules
-↓
-Dashboard ← Database ← Metrics Collector
-```
-
------
-
-## Usage
-
-### Starting Individual Components
+The live mode requires Ubuntu 22.04/24.04, root, Open vSwitch, Mininet, and Suricata. It creates a local Mininet topology; it does not monitor your host's physical network interface.
 
 ```bash
-# Start Ryu controller
-ryu-manager src/controller/sdn_controller.py
-
-# Start dashboard (in another terminal)
-python3 src/dashboard/app.py
-
-# Create network topology
-python3 src/network/topology.py simple
-
-# Run attack simulation
-python3 -c "
-from src.attacks.attack_manager import AttackManager
-manager = AttackManager()
-manager.run_demo_scenario(target='10.0.0.2')
-"
+bash scripts/setup_environment.sh --live
+sudo bash scripts/start_system.sh
 ```
 
-### Dashboard Features
+The live launcher starts the OS-Ken controller, Suricata on the Mininet switch interface, the incident orchestrator, and the dashboard. It opens the Mininet CLI for local connectivity checks. The dashboard is at `http://127.0.0.1:5000`; Ctrl-C or Ctrl-D shuts down the stack. Logs and SQLite files are stored under `logs/`.
 
-  * **Real-time Alerts**: View detected threats as they occur
-  * **Network Topology**: Visualize network structure and connections
-  * **Attack Logs**: Comprehensive logging of all security events
-  * **Performance Metrics**: System and network performance monitoring
-  * **IP Blocking**: Manual threat response capability
+Live mode has not been exercised on this host: it does not have Mininet, Open vSwitch, or Suricata installed. Suricata 7.0.17 did validate the repository rules and YAML configuration. The actual OpenFlow dataplane and packet capture should be checked in the supported Ubuntu lab.
 
-### API Endpoints
+## Configuration and tests
 
-| Category | Method | Endpoint | Description |
-| :--- | :--- | :--- | :--- |
-| **Authentication** | `GET` | `/api/status` | System status |
-| **Topology** | `GET` | `/api/topology` | Network topology data |
-| **Alerts** | `GET` | `/api/alerts` | Recent alerts (sortable/filterable) |
-| | `POST` | `/api/block_ip` | Block IP address |
-| | `POST` | `/api/unblock_ip` | Unblock IP address |
-| **Metrics** | `GET` | `/api/metrics` | Real-time system metrics |
-| | `GET` | `/api/metrics/history` | Historical metrics |
-| **Flows** | `GET` | `/api/flows` | Active OpenFlow rules |
-
------
-
-## Threat Model
-
-The system implements **STRIDE** threat modeling with 33 identified threats:
-
-  * **S**poofing: Controller/Switch authentication
-  * **T**ampering: Flow rule integrity, input validation
-  * **R**epudiation: Comprehensive audit logging
-  * **I**nformation **D**isclosure: Access controls, encryption
-  * **D**enial of **S**ervice: Rate limiting, resource management
-  * **E**levation of **P**rivilege: Role-based access control
-
-See `threat_model/` directory for detailed threat analysis.
-
------
-
-## Attack Scenarios
-
-### Supported Attacks
-
-1.  **Port Scan**: Network reconnaissance
-2.  **SYN Flood**: DoS attack
-3.  **UDP Flood**: Volume-based attack
-4.  **ICMP Flood**: Bandwidth attack
-5.  **ARP Spoofing**: Man-in-the-middle
-6.  **SQL Injection**: Database attack
-7.  **Brute Force**: Authentication attack
-8.  **MQTT Injection**: IoT-specific attack
-
-### Running Attacks
-
-```python
-from src.attacks.attack_manager import AttackManager
-
-manager = AttackManager()
-attack_id = manager.execute_attack(
-    'dos',
-    target='10.0.0.2',
-    duration=30,
-    packet_rate=100
-)
-```
-
------
-
-## Performance Metrics
-
-  * **Detection Latency**: \<100ms
-  * **Throughput**: 100k+ packets/second
-  * **Database**: SQLite (scalable to PostgreSQL)
-  * **Supports up to 1000 concurrent flows**
-
------
-
-## Troubleshooting
-
-### Controller won't connect to switches
+Project settings are in `config/controller_config.json`; `NIDPS_CONFIG` can point to an alternate JSON file. The control and dashboard APIs bind to loopback by default. Change network exposure only when you have configured appropriate access controls.
 
 ```bash
-# Check Ryu is running
-ps aux | grep ryu
-
-# Check port 6653
-netstat -tlnp | grep 6653
-
-# Restart controller
-pkill -f ryu-manager
-ryu-manager src/controller/sdn_controller.py
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+python -m src.demo --check
 ```
 
-### Suricata not generating alerts
-
-```bash
-# Check Suricata status
-sudo systemctl status suricata
-
-# Check EVE log
-tail -f /var/log/suricata/eve.json
-
-# Restart Suricata
-sudo systemctl restart suricata
-```
-
-### Database issues
-
-```bash
-# Check database file
-ls -lh logs/nidps.db
-
-# Reinitialize database
-rm logs/nidps.db
-python3 -c "from src.database.database import db"
-```
-
------
-
-## Documentation
-
-  * `docs/ARCHITECTURE.md` - System architecture details
-  * `docs/API_DOCS.md` - API reference
-  * `docs/DEPLOYMENT.md` - Production deployment guide
-  * `threat_model/` - Threat modeling documentation
-
------
-
-## Contributing
-
-1.  Create feature branch
-2.  Make changes
-3.  Run tests
-4.  Submit pull request
-
------
-
-## License
-
-This project is for educational purposes.
-
------
-
-## Support
-
-For issues and questions:
-
-  * Check documentation first
-  * Review logs in `logs/` directory
-  * Create GitHub issue with details
-
------
-
-## Authors
-
-  * Abhidutta Mukund Giri
-  * Avishi Bansal
-  * Piyush
-
------
-
-## Acknowledgments
-
-  * Manipal Institute of Technology
-  * Ryu SDN Project
-  * Suricata IDS Project
-  * Mininet Network Simulator
-
------
+For service endpoints and architecture details, see [docs/API_DOCS.md](docs/API_DOCS.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The optional attack simulator modules are intended for isolated labs only; the offline replay is the recommended demonstration path.

@@ -17,15 +17,22 @@ class MLDetector:
         self.attack_types = [
             'BENIGN', 'DOS', 'PROBE', 'R2L', 'U2R'
         ]
-        self._load_model()
+        if config.get('detection.enable_ml', True):
+            self._load_model()
     
     def _load_model(self):
         """Load pre-trained ML model"""
-        model_path = Path(config.get('detection.model_path', 'models/traffic_classifier.pkl'))
+        model_path = config.path('detection.model_path', 'models/traffic_classifier.pkl')
         
         if model_path.exists():
             try:
                 self.model = joblib.load(model_path)
+                from sklearn.pipeline import Pipeline
+                if not isinstance(self.model, Pipeline):
+                    scaler_path = model_path.parent / 'scaler.pkl'
+                    if not scaler_path.exists():
+                        raise ValueError('Legacy model has no scaler; run models/setup_model.py')
+                    self.model = Pipeline([('scale', joblib.load(scaler_path)), ('classifier', self.model)])
                 logger.info(f"ML model loaded: {model_path}")
             except Exception as e:
                 logger.error(f"Failed to load ML model: {e}")
@@ -51,8 +58,10 @@ class MLDetector:
             prediction = self.model.predict([feature_vector])[0]
             probabilities = self.model.predict_proba([feature_vector])[0]
             
+            prediction = int(prediction)
+            labels = [int(label) for label in self.model.classes_]
             attack_type = self.attack_types[prediction]
-            confidence = probabilities[prediction]
+            confidence = probabilities[labels.index(prediction)]
             
             threshold = config.get('detection.threshold', 0.7)
             
@@ -61,8 +70,8 @@ class MLDetector:
                 'attack_type': attack_type,
                 'confidence': float(confidence),
                 'probabilities': {
-                    self.attack_types[i]: float(probabilities[i]) 
-                    for i in range(len(self.attack_types))
+                    self.attack_types[label]: float(probabilities[i])
+                    for i, label in enumerate(labels)
                 }
             }
         except Exception as e:
@@ -94,26 +103,9 @@ class MLDetector:
         return np.array(features)
     
     def train_model(self, training_data, labels):
-        """Train new model (for future use)"""
-        from sklearn.ensemble import RandomForestClassifier
-        from sklearn.preprocessing import StandardScaler
-        
-        # Preprocess data
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(training_data)
-        
-        # Train model
-        self.model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=20,
-            random_state=42,
-            n_jobs=-1
-        )
-        self.model.fit(X_scaled, labels)
-        
-        # Save model
-        model_path = Path(config.get('detection.model_path', 'models/traffic_classifier.pkl'))
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(self.model, model_path)
-        
-        logger.info(f"Model trained and saved: {model_path}")
+        from models.train_models import ModelTrainer
+        trainer = ModelTrainer(config.path('detection.model_path', 'models/traffic_classifier.pkl'))
+        trainer.source = 'caller supplied data'
+        trainer.train(training_data, labels)
+        trainer.save_model()
+        self.model = trainer.model

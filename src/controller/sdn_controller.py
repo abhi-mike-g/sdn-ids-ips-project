@@ -1,9 +1,9 @@
-from ryu.base import app_manager
-from ryu.controller import ofp_event
-from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_3
-from ryu.lib.packet import packet, ethernet, ipv4, tcp, udp, arp
+from os_ken.base import app_manager
+from os_ken.controller import ofp_event
+from os_ken.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER, DEAD_DISPATCHER
+from os_ken.controller.handler import set_ev_cls
+from os_ken.ofproto import ofproto_v1_3
+from os_ken.lib.packet import packet, ethernet, ipv4, tcp, udp, arp
 from .flow_manager import FlowManager
 from .policy_enforcer import PolicyEnforcer
 from .threat_detector import ThreatDetector
@@ -13,9 +13,14 @@ from ..database.database import db
 from ..utils.logger import setup_logger
 from ..utils.config import config
 
+from os_ken.lib import hub
+from os_ken.topology import event as topology_event
+from .http_api import create_controller_api
+from datetime import datetime, timezone
+
 logger = setup_logger('sdn_controller')
 
-class SDNIDPSController(app_manager.RyuApp):
+class SDNIDPSController(app_manager.OSKenApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     
     def __init__(self, *args, **kwargs):
@@ -28,9 +33,15 @@ class SDNIDPSController(app_manager.RyuApp):
         self.topology_manager = TopologyManager()
         
         # Data structures
+        self.packet_count = 0
         self.datapaths = {}
         self.mac_to_port = {}
         
+        api = create_controller_api(self)
+        self.api_server = hub.WSGIServer((config.get('controller.api_host', '127.0.0.1'),
+                                          config.get('controller.wsgi_port', 8080)), api)
+        self.api_thread = hub.spawn(self.api_server.serve_forever)
+
         # Start Suricata monitor
         self.suricata = SuricataMonitor(self.handle_suricata_alert)
         self.suricata.start()
@@ -77,7 +88,10 @@ class SDNIDPSController(app_manager.RyuApp):
         in_port = msg.match['in_port']
         
         pkt = packet.Packet(msg.data)
-        eth = pkt.get_protocols(ethernet.ethernet)[0]
+        eth = pkt.get_protocol(ethernet.ethernet)
+        if eth is None or eth.ethertype == 0x88cc:  # LLDP is handled by topology discovery
+            return
+        self.packet_count += 1
         
         # Extract packet info
         flow_features = self.extract_flow_features(pkt, in_port, datapath.id)
@@ -85,11 +99,13 @@ class SDNIDPSController(app_manager.RyuApp):
         # Threat detection
         threat_result = self.threat_detector.analyze_packet(flow_features)
         
-        if threat_result['is_threat']:
+        if (threat_result['is_threat'] and flow_features.get('src_ip')
+                and flow_features['src_ip'] not in config.get('policies.protected_ips', [])):
             logger.warning(f"Threat detected: {threat_result['threat_type']} from {flow_features.get('src_ip')}")
             
             # Enforce policy
-            self.policy_enforcer.block_flow(datapath, flow_features)
+            for switch in list(self.datapaths.values()):
+                self.policy_enforcer.block_flow(switch, flow_features)
             
             # Log to database
             db.insert_alert({
@@ -108,6 +124,13 @@ class SDNIDPSController(app_manager.RyuApp):
             # Don't forward malicious packet
             return
         
+        if flow_features.get('src_ip'):
+            # Learn hosts only at edge ports; LLDP link events identify trunks.
+            if not any((link[0] == datapath.id and link[1] == in_port) or
+                       (link[2] == datapath.id and link[3] == in_port)
+                       for link in self.topology_manager.links):
+                self.topology_manager.add_host(eth.src, flow_features['src_ip'], datapath.id, in_port)
+
         # Normal L2 learning switch logic
         dst = eth.dst
         src = eth.src
@@ -124,7 +147,7 @@ class SDNIDPSController(app_manager.RyuApp):
         actions = [parser.OFPActionOutput(out_port)]
         
         # Install flow to avoid packet_in next time
-        if out_port != ofproto.OFPP_FLOOD:
+        if out_port != ofproto.OFPP_FLOOD and not config.get('detection.inspect_all_packets', True):
             match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_src=src)
             self.flow_manager.install_flow(datapath, 1, match, actions, 
                                           idle_timeout=60, hard_timeout=300)
@@ -143,7 +166,7 @@ class SDNIDPSController(app_manager.RyuApp):
         features = {
             'switch_id': switch_id,
             'in_port': in_port,
-            'timestamp': None  # Add actual timestamp
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
         
         eth_pkt = pkt.get_protocol(ethernet.ethernet)
@@ -187,9 +210,12 @@ class SDNIDPSController(app_manager.RyuApp):
         severity = alert.get('alert', {}).get('severity', 3)
         
         # Block if critical/high severity
-        if severity <= 2 and src_ip:
+        blocked = False
+        if (not config.get('orchestrator.enabled', True) and severity <= 2 and src_ip
+                and src_ip not in config.get('policies.protected_ips', [])):
             for dpid, datapath in self.datapaths.items():
                 self.policy_enforcer.block_ip(datapath, src_ip)
+                blocked = True
         
         # Store in database
         db.insert_alert({
@@ -203,5 +229,22 @@ class SDNIDPSController(app_manager.RyuApp):
             'signature': alert.get('alert', {}).get('signature', ''),
             'description': alert.get('alert', {}).get('description', ''),
             'raw_data': str(alert),
-            'blocked': severity <= 2
+            'blocked': blocked
         })
+
+    @set_ev_cls(topology_event.EventLinkAdd)
+    def link_added(self, ev):
+        link = ev.link
+        self.topology_manager.add_link(link.src.dpid, link.src.port_no,
+                                       link.dst.dpid, link.dst.port_no)
+
+    @set_ev_cls(topology_event.EventLinkDelete)
+    def link_removed(self, ev):
+        link = ev.link
+        self.topology_manager.remove_link(link.src.dpid, link.src.port_no,
+                                          link.dst.dpid, link.dst.port_no)
+
+    def close(self):
+        self.suricata.stop()
+        hub.kill(self.api_thread)
+        super().close()

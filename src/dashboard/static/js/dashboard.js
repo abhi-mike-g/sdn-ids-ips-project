@@ -61,7 +61,7 @@ class Dashboard {
                     labels: [],
                     datasets: [
                         {
-                            label: 'Packets/sec',
+                            label: 'Host packets/sec',
                             data: [],
                             borderColor: 'rgb(75, 192, 192)',
                             backgroundColor: 'rgba(75, 192, 192, 0.1)',
@@ -146,9 +146,7 @@ class Dashboard {
         }
         this.updateAlertsDisplay();
         
-        // Update statistics
-        document.getElementById('active-threats').textContent = 
-            parseInt(document.getElementById('active-threats').textContent) + 1;
+        fetch('/api/statistics').then(r => r.json()).then(data => this.updateStatistics(data));
     }
     
     updateAlertsDisplay() {
@@ -167,10 +165,10 @@ class Dashboard {
             
             html += `
                 <div class="alert alert-${severityClass} alert-dismissible fade show mb-2" role="alert">
-                    <strong>${severityText}:</strong> ${alert.signature}
+                    <strong>${severityText}:</strong> ${escapeHTML(alert.signature)}
                     <br/>
                     <small class="text-muted">
-                        ${alert.source_ip}:${alert.source_port} → ${alert.destination_ip}:${alert.destination_port}
+                        ${escapeHTML(alert.source_ip)}:${escapeHTML(alert.source_port)} → ${escapeHTML(alert.destination_ip)}:${escapeHTML(alert.destination_port)}
                         <br/>
                         ${new Date(alert.timestamp).toLocaleTimeString()}
                     </small>
@@ -194,7 +192,8 @@ class Dashboard {
         if (this.charts.traffic) {
             const now = new Date().toLocaleTimeString();
             this.charts.traffic.data.labels.push(now);
-            this.charts.traffic.data.datasets[0].data.push(metrics.cpu_percent);
+            this.charts.traffic.data.datasets[0].data.push(metrics.packets_per_second ?? null);
+            this.charts.traffic.data.datasets[1].data.push(this.alerts.length);
             
             if (this.charts.traffic.data.labels.length > 20) {
                 this.charts.traffic.data.labels.shift();
@@ -208,17 +207,28 @@ class Dashboard {
     updateStatistics(stats) {
         document.getElementById('switch-count').textContent = stats.switches || 0;
         document.getElementById('active-flows').textContent = stats.total_flows || 0;
+        document.getElementById('active-threats').textContent = stats.active_threats || 0;
+        document.getElementById('blocked-ips').textContent = stats.blocked_ips ?? 'Unavailable';
+        if (this.charts.attacks) {
+            const entries = Object.entries(stats.attack_types || {});
+            this.charts.attacks.data.labels = entries.map(([name]) => name);
+            this.charts.attacks.data.datasets[0].data = entries.map(([, count]) => count);
+            this.charts.attacks.update();
+        }
+        if (this.charts.timeline) {
+            const buckets = {};
+            this.alerts.forEach(a => { const key = new Date(a.timestamp).toLocaleTimeString(); buckets[key] = (buckets[key] || 0) + 1; });
+            this.charts.timeline.data.labels = Object.keys(buckets).reverse();
+            this.charts.timeline.data.datasets[0].data = Object.values(buckets).reverse();
+            this.charts.timeline.update();
+        }
     }
     
     updateTopology(topology) {
-        // Update topology statistics
-        document.getElementById('topo-switches').textContent = 
+        document.getElementById('switch-count').textContent =
             topology.nodes.filter(n => n.type === 'switch').length;
-        document.getElementById('topo-hosts').textContent = 
-            topology.nodes.filter(n => n.type === 'host').length;
-        document.getElementById('topo-links').textContent = topology.edges.length;
     }
-    
+
     getSeverityClass(severity) {
         if (severity <= 1) return 'danger';
         if (severity <= 2) return 'warning';
@@ -235,6 +245,10 @@ class Dashboard {
     
     setupAutoRefresh() {
         setInterval(() => {
+            fetch('/api/statistics').then(r => r.json()).then(data => this.updateStatistics(data));
+            fetch('/api/alerts?limit=100').then(r => r.json()).then(data => {
+                this.alerts = data; this.updateAlertsDisplay();
+            });
             fetch('/api/metrics')
                 .then(r => r.json())
                 .then(data => this.updateMetrics(data))

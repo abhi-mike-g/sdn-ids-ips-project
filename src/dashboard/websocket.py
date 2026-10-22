@@ -12,7 +12,7 @@ def handle_connect():
     emit('connection_response', {'status': 'connected'})
 
 @socketio.on('disconnect')
-def handle_disconnect():
+def handle_disconnect(reason=None):
     """Handle client disconnection"""
     logger.info("Client disconnected")
 
@@ -21,8 +21,9 @@ def handle_update_request(data):
     """Handle update request from client"""
     update_type = data.get('type')
     logger.debug(f"Update requested: {update_type}")
-    # Emit requested data
-    emit('update_response', {'type': update_type, 'data': {}})
+    from flask import current_app
+    if update_type == 'metrics':
+        emit('metrics_update', current_app.extensions['metrics_collector'].get_current_metrics())
 
 def emit_alert(alert_data):
     """Emit alert to all connected clients"""

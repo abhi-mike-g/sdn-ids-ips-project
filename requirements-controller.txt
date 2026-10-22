@@ -1,0 +1,4 @@
+# Separate control-plane dependencies; Mininet and OVS are OS packages.
+-r requirements.txt
+os-ken==2.11.2
+eventlet>=0.40.3,<0.41

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>document.documentElement.dataset.theme = localStorage.getItem('nidps-theme') || 'light';</script>
     <title>{% block title %}SDN NIDPS Dashboard{% endblock %}</title>
     
     <!-- Bootstrap CSS -->
@@ -18,16 +19,16 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     
     {% block extra_css %}{% endblock %}
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <i class="fas fa-shield-alt"></i> SDN NIDPS
+                <i class="fas fa-shield-alt"></i> SNID&amp;PSS
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -40,6 +41,7 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/topology"><i class="fas fa-project-diagram"></i> Topology</a>
                     </li>
+                    <li class="nav-item"><a class="nav-link" href="/incidents">Incidents</a></li>
                     <li class="nav-item">
                         <a class="nav-link" href="/logs"><i class="fas fa-list"></i> Alerts</a>
                     </li>
@@ -53,6 +55,7 @@
                     </li>
                 </ul>
             </div>
+            <button class="btn theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">☾</button>
         </div>
     </nav>
 
@@ -61,8 +64,9 @@
         {% block content %}{% endblock %}
     </div>
 
+    <div class="container text-muted small" id="system-mode"></div>
     <!-- Footer -->
-    <footer class="footer mt-auto py-3 bg-light">
+    <footer class="footer mt-auto py-3">
         <div class="container text-center">
             <span class="text-muted">SDN-based Network Intrusion Detection & Prevention System</span>
         </div>
@@ -73,13 +77,58 @@
     
     <!-- Socket.IO Connection -->
     <script>
+        function escapeHTML(value) {
+            const node = document.createElement('span');
+            node.textContent = value == null ? '' : String(value);
+            return node.innerHTML;
+        }
         const socket = io();
+        window.applyChartTheme = function () {
+            if (!window.Chart) return;
+            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+            const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+            Chart.defaults.color = textColor;
+            Chart.defaults.borderColor = borderColor;
+            Object.values(Chart.instances || {}).forEach(chart => {
+                chart.options.color = textColor;
+                Object.values(chart.options.scales || {}).forEach(scale => {
+                    scale.ticks.color = textColor;
+                    scale.grid.color = borderColor;
+                });
+                chart.update('none');
+            });
+        };
+        window.applyChartTheme();
+        window.addEventListener('nidps-theme-change', window.applyChartTheme);
+        const themeButton = document.getElementById('theme-toggle');
+        function updateThemeButton() {
+            const dark = document.documentElement.dataset.theme === 'dark';
+            themeButton.textContent = dark ? '☀' : '☾';
+            themeButton.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+            themeButton.setAttribute('aria-label', themeButton.title);
+            themeButton.setAttribute('aria-pressed', String(dark));
+        }
+        updateThemeButton();
+        themeButton.addEventListener('click', () => {
+            document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('nidps-theme', document.documentElement.dataset.theme);
+            updateThemeButton();
+            window.dispatchEvent(new CustomEvent('nidps-theme-change'));
+        });
         
         socket.on('connect', function() {
             document.getElementById('connection-status').innerHTML = 
-                '<i class="fas fa-circle text-success"></i> Connected';
+                '<i class="fas fa-circle text-success"></i> Dashboard connected';
         });
         
+        function refreshStatus() {
+            fetch('/api/status').then(r => r.json()).then(data => {
+                document.getElementById('system-mode').textContent =
+                    'Mode: ' + data.mode + ' | ' + (data.mode === 'offline replay' ? 'Topology and flows: simulated' : 'Controller: ' + data.controller);
+            }).catch(console.error);
+        }
+        refreshStatus();
+        setInterval(refreshStatus, 5000);
         socket.on('disconnect', function() {
             document.getElementById('connection-status').innerHTML = 
                 '<i class="fas fa-circle text-danger"></i> Disconnected';

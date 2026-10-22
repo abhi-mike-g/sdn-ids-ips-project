@@ -1,15 +1,19 @@
 from ..utils.logger import setup_logger
 from ..detection.ml_detector import MLDetector
 import time
+from collections import deque
+from ..utils.config import config
 
 logger = setup_logger('threat_detector')
 
 class ThreatDetector:
-    def __init__(self):
+    def __init__(self, clock=None):
         self.ml_detector = MLDetector()
         self.suspicious_ips = {}  # {ip: {'count': int, 'first_seen': timestamp}}
-        self.port_scan_threshold = 10  # ports scanned per minute
-        self.connection_threshold = 100  # connections per minute
+        self.port_scan_threshold = config.get('detection.port_scan_threshold', 10)
+        self.connection_threshold = config.get('detection.connection_threshold', 100)
+        self.window = 60.0
+        self.clock = clock or time.monotonic
         
     def analyze_packet(self, flow_features):
         """Analyze packet for threats"""
@@ -28,7 +32,7 @@ class ThreatDetector:
             threats.append('SUSPICIOUS_PORT')
         
         # ML-based detection
-        if self.ml_detector.is_loaded():
+        if self.ml_detector.is_loaded() and all(k in flow_features for k in ('packet_count', 'byte_count', 'duration')):
             ml_result = self.ml_detector.predict(flow_features)
             if ml_result['is_malicious']:
                 threats.append(ml_result['attack_type'])
@@ -44,68 +48,45 @@ class ThreatDetector:
         
         return {'is_threat': False}
     
+    def _state(self, src_ip):
+        now = self.clock()
+        if len(self.suspicious_ips) >= 10000:
+            self.suspicious_ips = {ip: data for ip, data in self.suspicious_ips.items()
+                                   if now - data['last_seen'] < self.window}
+            if len(self.suspicious_ips) >= 10000 and src_ip not in self.suspicious_ips:
+                self.suspicious_ips.pop(min(self.suspicious_ips,
+                                           key=lambda ip: self.suspicious_ips[ip]['last_seen']))
+        state = self.suspicious_ips.setdefault(src_ip, {'ports': {}, 'syn_times': deque(),
+                                                       'first_seen': now, 'last_seen': now})
+        state['last_seen'] = now
+        return now, state
+
     def _detect_port_scan(self, features):
-        """Detect port scanning behavior"""
-        src_ip = features.get('src_ip')
-        dst_port = features.get('dst_port')
-        
-        if not src_ip or not dst_port:
+        """Count distinct destination ports in a sliding minute, not a rate
+        extrapolated from the first few microseconds of a connection."""
+        src_ip, port = features.get('src_ip'), features.get('dst_port')
+        if not src_ip or port is None:
             return False
-        
-        current_time = time.time()
-        
-        if src_ip not in self.suspicious_ips:
-            self.suspicious_ips[src_ip] = {
-                'ports': set(),
-                'first_seen': current_time
-            }
-        
-        ip_data = self.suspicious_ips[src_ip]
-        ip_data['ports'].add(dst_port)
-        
-        # Check if scanning multiple ports
-        time_window = current_time - ip_data['first_seen']
-        if time_window > 0:
-            ports_per_minute = len(ip_data['ports']) / (time_window / 60)
-            if ports_per_minute > self.port_scan_threshold:
-                logger.warning(f"Port scan detected from {src_ip}: {len(ip_data['ports'])} ports")
-                return True
-        
-        # Cleanup old entries
-        if time_window > 300:  # 5 minutes
-            del self.suspicious_ips[src_ip]
-        
-        return False
-    
+        now, state = self._state(src_ip)
+        state['ports'] = {p: ts for p, ts in state['ports'].items() if now - ts < self.window}
+        state['ports'][port] = now
+        return len(state['ports']) >= self.port_scan_threshold
+
     def _detect_dos(self, features):
-        """Detect DoS attack patterns"""
-        src_ip = features.get('src_ip')
-        if not src_ip:
+        if not features.get('src_ip') or features.get('protocol') != 6:
             return False
-        
-        # Check for SYN flood (TCP with SYN flag)
-        if features.get('protocol') == 6:  # TCP
-            tcp_flags = features.get('tcp_flags', 0)
-            if tcp_flags & 0x02:  # SYN flag
-                # Track SYN packets per IP
-                if src_ip not in self.suspicious_ips:
-                    self.suspicious_ips[src_ip] = {
-                        'syn_count': 0,
-                        'syn_first_seen': time.time()
-                    }
-                
-                ip_data = self.suspicious_ips[src_ip]
-                ip_data['syn_count'] = ip_data.get('syn_count', 0) + 1
-                
-                time_window = time.time() - ip_data.get('syn_first_seen', time.time())
-                if time_window > 0:
-                    syn_per_minute = ip_data['syn_count'] / (time_window / 60)
-                    if syn_per_minute > self.connection_threshold:
-                        logger.warning(f"SYN flood detected from {src_ip}")
-                        return True
-        
-        return False
-    
+        flags = features.get('tcp_flags', 0)
+        if not flags & 0x02 or flags & 0x10:  # count SYN, not SYN+ACK
+            return False
+        now, state = self._state(features['src_ip'])
+        samples = state['syn_times']
+        while samples and now - samples[0] >= self.window:
+            samples.popleft()
+        samples.append(now)
+        while len(samples) > self.connection_threshold:
+            samples.popleft()
+        return len(samples) >= self.connection_threshold
+
     def _detect_suspicious_port(self, features):
         """Detect connections to suspicious ports"""
         suspicious_ports = {

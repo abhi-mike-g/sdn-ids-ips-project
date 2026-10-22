@@ -12,18 +12,5 @@ __version__ = "1.0.0"
 __author__ = "Abhidutta Mukund Giri, Avishi Bansal, Piyush"
 __license__ = "Educational Use"
 
-# Import main components for easy access
-try:
-    from src.controller.sdn_controller import SDNIDPSController
-    from src.detection.suricata_monitor import SuricataMonitor
-    from src.dashboard.app import create_app
-    from src.database.database import db
-except ImportError as e:
-    print(f"Warning: Could not import some modules: {e}")
-
-__all__ = [
-    'SDNIDPSController',
-    'SuricataMonitor',
-    'create_app',
-    'db'
-]
+# Components are imported explicitly; importing utilities must not start the
+# controller, create a database, or require Mininet/root privileges.

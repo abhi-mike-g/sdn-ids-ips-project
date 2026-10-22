@@ -1,10 +1,5 @@
 import threading
 import time
-from .dos_attack import DoSAttack
-from .port_scan import PortScanAttack
-from .mitm_attack import MITMAttack
-from .sql_injection import SQLInjectionAttack
-from .brute_force import BruteForceAttack
 from ..utils.logger import setup_logger
 
 logger = setup_logger('attack_manager')
@@ -13,6 +8,11 @@ class AttackManager:
     """Orchestrates and manages attack scenarios"""
     
     def __init__(self):
+        from .dos_attack import DoSAttack
+        from .port_scan import PortScanAttack
+        from .mitm_attack import MITMAttack
+        from .sql_injection import SQLInjectionAttack
+        from .brute_force import BruteForceAttack
         self.attacks = {
             'dos': DoSAttack,
             'port_scan': PortScanAttack,
@@ -41,7 +41,8 @@ class AttackManager:
         )
         thread.start()
         
-        attack_id = f"{attack_type}_{int(time.time())}"
+        import uuid
+        attack_id = f'{attack_type}_{uuid.uuid4().hex}'
         self.active_attacks[attack_id] = {
             'attack': attack,
             'thread': thread,
@@ -86,13 +87,15 @@ class AttackManager:
             ('port_scan', {'ports': '1-1024', 'delay': 0.1}),
             ('dos', {'duration': 30, 'packet_rate': 100}),
             ('brute_force', {'service': 'ssh', 'attempts': 50}),
-            ('sql_injection', {'url': f'http://{target}/login'}),
+            ('sql_injection', {}),
         ]
         
         for attack_type, kwargs in demo_attacks:
             logger.info(f"Executing: {attack_type}")
-            attack_id = self.execute_attack(attack_type, target, **kwargs)
-            time.sleep(10)  # Wait between attacks
+            attack_target = f'http://{target}/login' if attack_type == 'sql_injection' else target
+            attack_id = self.execute_attack(attack_type, attack_target, **kwargs)
+            self.active_attacks[attack_id]['thread'].join()
+            del self.active_attacks[attack_id]
         
         logger.info("Demo scenario completed")
     

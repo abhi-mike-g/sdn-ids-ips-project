@@ -85,17 +85,17 @@ class NetworkTopology:
         # External attacker (simulated external network)
         attacker = self.net.addHost(
             'attacker',
-            ip='203.0.113.50/24',
+            ip='10.0.0.50/24',
             mac='00:00:00:00:00:ff'
         )
         
         # Internal victims
-        victim1 = self.net.addHost('victim1', ip='192.168.1.10/24', mac='00:00:00:00:01:01')
-        victim2 = self.net.addHost('victim2', ip='192.168.1.11/24', mac='00:00:00:00:01:02')
-        victim3 = self.net.addHost('victim3', ip='192.168.1.12/24', mac='00:00:00:00:01:03')
+        victim1 = self.net.addHost('victim1', ip='10.0.0.10/24', mac='00:00:00:00:01:01')
+        victim2 = self.net.addHost('victim2', ip='10.0.0.11/24', mac='00:00:00:00:01:02')
+        victim3 = self.net.addHost('victim3', ip='10.0.0.12/24', mac='00:00:00:00:01:03')
         
         # Web server (vulnerable)
-        webserver = self.net.addHost('webserver', ip='192.168.1.100/24', mac='00:00:00:00:01:ff')
+        webserver = self.net.addHost('webserver', ip='10.0.0.100/24', mac='00:00:00:00:01:ff')
         
         # Links
         self.net.addLink(attacker, gateway)  # External connection
@@ -128,7 +128,7 @@ class NetworkTopology:
         )
         
         # Core switch
-        core = self.net.addSwitch('score', protocols='OpenFlow13')
+        core = self.net.addSwitch('score', protocols='OpenFlow13', dpid='100')
         
         switches = []
         for i in range(num_switches):
@@ -142,9 +142,11 @@ class NetworkTopology:
             # Add hosts to this switch
             for j in range(hosts_per_switch):
                 host_num = i * hosts_per_switch + j + 1
+                if host_num > 250:
+                    raise ValueError('the flat demo subnet supports at most 250 hosts')
                 host = self.net.addHost(
                     f'h{host_num}',
-                    ip=f'10.0.{i}.{j+1}/24',
+                ip=f'10.0.0.{host_num}/24',
                     mac=f'00:00:00:00:{i:02x}:{j+1:02x}'
                 )
                 self.net.addLink(host, switch)

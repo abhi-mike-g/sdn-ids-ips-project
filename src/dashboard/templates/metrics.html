@@ -3,45 +3,31 @@
 {% block title %}System Metrics - SDN NIDPS{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-title text-muted">CPU Usage</h6>
-                <div id="cpu-gauge" style="height: 150px;"></div>
-                <h4 id="cpu-value" class="text-center">0%</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-title text-muted">Memory Usage</h6>
-                <div id="memory-gauge" style="height: 150px;"></div>
-                <h4 id="memory-value" class="text-center">0%</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-title text-muted">Detection Latency</h6>
-                <div id="latency-gauge" style="height: 150px;"></div>
-                <h4 id="latency-value" class="text-center">0 ms</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-title text-muted">Throughput</h6>
-                <div id="throughput-gauge" style="height: 150px;"></div>
-                <h4 id="throughput-value" class="text-center">0 Mbps</h4>
-            </div>
-        </div>
-    </div>
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+    <div><h1>Security metrics</h1><p class="section-lead mb-0" id="security-metric-mode">Loading replay and telemetry summary…</p></div>
+    <span class="badge bg-info" id="measurement-scope">Values are scoped to the current mode</span>
 </div>
-
+<div class="row g-3 mb-4">
+    {% for key, label in [('summary-alerts','Alert records'),('summary-incidents','Correlated incidents'),('summary-sources','Distinct sources'),('summary-targets','Assets targeted'),('summary-flows','Observed flows'),('summary-responses','Simulated responses')] %}
+    <div class="col-6 col-lg-2"><div class="card h-100"><div class="card-body"><div class="metric-label">{{ label }}</div><div class="metric-value" id="{{ key }}">—</div></div></div></div>
+    {% endfor %}
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-lg-7"><div class="card h-100"><div class="card-header"><h2 class="h5">Alert categories</h2></div><div class="card-body"><canvas id="securityChart" aria-label="Alerts grouped by category"></canvas></div></div></div>
+    <div class="col-lg-5"><div class="card h-100"><div class="card-header"><h2 class="h5">Most targeted services</h2></div>
+        <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Port</th><th>Protocol</th><th>Alert records</th></tr></thead><tbody id="targeted-ports"><tr><td colspan="3">Loading…</td></tr></tbody></table></div></div></div>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-lg-6"><div class="card"><div class="card-header"><h2 class="h5">Targeted assets</h2></div>
+        <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Destination</th><th>Alert records</th></tr></thead><tbody id="targeted-assets"><tr><td colspan="2">Loading…</td></tr></tbody></table></div></div></div>
+    <div class="col-lg-6"><div class="card"><div class="card-header"><h2 class="h5">Host resource and network measurements</h2></div><div class="card-body">
+        <div class="row g-3"><div class="col-4"><span class="metric-label">CPU</span><div class="metric-value" id="cpu-value">—</div></div><div class="col-4"><span class="metric-label">Memory</span><div class="metric-value" id="memory-value">—</div></div><div class="col-4"><span class="metric-label">Disk</span><div class="metric-value" id="disk-value">—</div></div>
+        <div class="col-6"><span class="metric-label">Observed packet rate</span><div class="metric-value" id="packet-rate-value">Collecting…</div></div><div class="col-6"><span class="metric-label">Observed throughput</span><div class="metric-value" id="throughput-value">Collecting…</div></div>
+        <div class="col-12"><span class="metric-label">Detection latency</span><div id="latency-value">Not measured</div></div></div>
+        <p class="metric-note mt-3 mb-0">Resource and interface readings describe this host. Replay event totals are not packet-rate measurements.</p>
+    </div></div></div>
+</div>
+<details class="card mb-4"><summary class="card-header">How to interpret these metrics</summary><div class="card-body"><p id="metrics-method-note" class="mb-0">The replay counters are derived from the supplied event records; no detection accuracy or live throughput is inferred from them.</p></div></details>
 <div class="row">
     <div class="col-md-6 mb-4">
         <div class="card">
@@ -70,7 +56,7 @@
     <div class="col-md-6 mb-4">
         <div class="card">
             <div class="card-header">
-                <h5>Network Traffic</h5>
+                <h5>Host Network Traffic</h5>
             </div>
             <div class="card-body">
                 <canvas id="networkChart"></canvas>
@@ -81,10 +67,10 @@
     <div class="col-md-6 mb-4">
         <div class="card">
             <div class="card-header">
-                <h5>Detection Latency</h5>
+                <h5>Alert family trend in replay</h5>
             </div>
             <div class="card-body">
-                <canvas id="latencyChart"></canvas>
+                <canvas id="familyTrendChart"></canvas>
             </div>
         </div>
     </div>

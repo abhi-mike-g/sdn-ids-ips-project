@@ -13,13 +13,18 @@ class PortScanAttack(AttackBase):
             name="Port Scan",
             description="Network port scanning attack"
         )
-        self.nm = nmap.PortScanner()
+        try:
+            self.nm = nmap.PortScanner()
+        except nmap.PortScannerError:
+            self.nm = None
     
     def execute(self, target, ports='1-1024', scan_type='syn', delay=0):
         """Execute port scan"""
         logger.info(f"Starting port scan: {target} ports {ports}")
         
         try:
+            if self.nm is None:
+                return self._simple_port_scan(target, ports, delay)
             # Use nmap for comprehensive scanning
             if scan_type == 'syn':
                 self.nm.scan(target, ports, arguments='-sS')

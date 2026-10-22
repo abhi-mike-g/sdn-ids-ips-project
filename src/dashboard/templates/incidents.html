@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Incidents - SDN NIDPS{% endblock %}
+{% block content %}
+<h2>Correlated incidents</h2>
+<p>Simulated actions come from replay. Live response time measures the controller API call, not packet loss.</p>
+<p id="incident-summary" role="status">Loading incidents…</p>
+<div class="table-responsive"><table class="table table-striped">
+<thead><tr><th>Source</th><th>Alerts</th><th>STRIDE categories</th><th>Decision</th><th>State</th><th>Controller response</th><th>Analyst action</th></tr></thead>
+<tbody id="incident-rows"></tbody></table></div>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/incidents.js') }}"></script>{% endblock %}

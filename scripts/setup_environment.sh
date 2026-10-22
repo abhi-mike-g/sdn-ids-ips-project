@@ -1,83 +1,42 @@
-#!/bin/bash
-
-set -e
-
-echo "=========================================="
-echo "SDN-NIDPS Environment Setup"
-echo "=========================================="
-
-# Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
+#!/usr/bin/env bash
+set -euo pipefail
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJECT_ROOT"
+MODE="${1:---demo}"
+if [[ "$MODE" != "--demo" && "$MODE" != "--live" ]]; then
+    echo "Usage: $0 [--demo|--live]" >&2; exit 2
 fi
-
-echo "[1/10] Updating package manager..."
-apt-get update
-apt-get upgrade -y
-
-echo "[2/10] Installing system dependencies..."
-apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-dev \
-    build-essential \
-    git \
-    wget \
-    curl \
-    nano \
-    net-tools \
-    tcpdump \
-    iperf3 \
-    wireshark \
-    openvswitch-switch \
-    openvswitch-common \
-    suricata \
-    suricata-update \
-    mininet \
-    iperf \
-    apache2-utils
-
-echo "[3/10] Installing Python dependencies..."
-pip3 install --upgrade pip
-pip3 install -r requirements.txt
-
-echo "[4/10] Creating directory structure..."
-mkdir -p logs
-mkdir -p models
-mkdir -p config
-mkdir -p database
-mkdir -p /var/log/suricata
-
-echo "[5/10] Setting up Suricata..."
-cp config/suricata.yaml /etc/suricata/suricata.yaml
-suricata-update
-
-echo "[6/10] Creating database..."
-python3 -c "from src.database.database import db; db"
-
-echo "[7/10] Configuring OVS..."
-systemctl start openvswitch-switch
-ovs-vsctl show
-
-echo "[8/10] Setting up logging..."
-touch logs/nidps.log
-chmod 666 logs/nidps.log
-
-echo "[9/10] Installing additional Python packages..."
-pip3 install python-nmap paramiko paho-mqtt
-
-echo "[10/10] Verifying installation..."
-python3 -c "import ryu; print('Ryu installed:', ryu.__version__)"
-python3 -c "import mininet; print('Mininet installed')"
-python3 -c "import flask; print('Flask installed:', flask.__version__)"
-
-echo "=========================================="
-echo "Setup Complete!"
-echo "=========================================="
-echo ""
-echo "Next steps:"
-echo "1. Start Ryu controller: ryu-manager src/controller/sdn_controller.py"
-echo "2. Start dashboard: python3 src/dashboard/app.py"
-echo "3. Run topology: python3 src/network/topology.py simple"
-echo "4. Run demo: ./scripts/run_demo.sh"
+if [[ "$MODE" == "--live" ]]; then
+    if ! command -v apt-get >/dev/null; then
+        echo "Live setup supports Ubuntu 22.04/24.04. Use an Ubuntu VM, or --demo on this host." >&2
+        exit 1
+    fi
+    sudo apt-get update
+    sudo apt-get install -y python3-venv python3-dev build-essential openvswitch-switch mininet suricata curl iproute2
+fi
+PYTHON="${NIDPS_BOOTSTRAP_PYTHON:-python3}"
+"$PYTHON" -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,12), "Use Python 3.10–3.12 (set NIDPS_BOOTSTRAP_PYTHON)"'
+# system-site-packages exposes the distro's Mininet to the venv in live mode.
+if [[ "$MODE" == "--live" ]]; then
+    "$PYTHON" -m venv --system-site-packages .venv
+else
+    "$PYTHON" -m venv .venv
+fi
+.venv/bin/python -m pip install --upgrade pip
+REQUIREMENTS=requirements.txt
+if [[ "$MODE" == "--live" ]]; then REQUIREMENTS=requirements-controller.txt; fi
+.venv/bin/python -m pip install -r "$REQUIREMENTS"
+mkdir -p logs .run
+.venv/bin/python -m models.setup_model
+if [[ "$MODE" == "--live" ]]; then
+    sudo systemctl start openvswitch-switch
+    mkdir -p logs/suricata
+    sudo suricata -T -c "$PROJECT_ROOT/config/suricata.yaml" \
+        -S "$PROJECT_ROOT/src/detection/rules/custom.rules" -l "$PROJECT_ROOT/logs/suricata"
+fi
+.venv/bin/python -m src.demo --check
+if [[ "$MODE" == "--live" ]]; then
+    echo "Setup complete. Start the isolated live lab with: sudo bash scripts/start_system.sh"
+else
+    echo "Setup complete. Start the offline demo with: bash scripts/run_demo.sh"
+fi

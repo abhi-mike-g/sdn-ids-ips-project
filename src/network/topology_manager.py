@@ -29,7 +29,7 @@ class TopologyManager:
     
     def add_host(self, mac, ip=None, switch_dpid=None, port=None):
         """Add host to topology"""
-        if mac not in self.hosts:
+        if mac not in self.hosts or self.hosts[mac].get('switch') != switch_dpid:
             self.hosts[mac] = {
                 'mac': mac,
                 'ip': ip,
@@ -42,11 +42,17 @@ class TopologyManager:
     
     def add_link(self, src_dpid, src_port, dst_dpid, dst_port):
         """Add link between switches"""
-        link = (src_dpid, src_port, dst_dpid, dst_port)
+        link = ((src_dpid, src_port, dst_dpid, dst_port) if src_dpid < dst_dpid
+                else (dst_dpid, dst_port, src_dpid, src_port))
         if link not in self.links:
             self.links.append(link)
             logger.info(f"Link added: {src_dpid}:{src_port} <-> {dst_dpid}:{dst_port}")
     
+    def remove_link(self, src_dpid, src_port, dst_dpid, dst_port):
+        endpoints = {(src_dpid, src_port), (dst_dpid, dst_port)}
+        self.links = [link for link in self.links
+                      if {(link[0], link[1]), (link[2], link[3])} != endpoints]
+
     def update_mac_port(self, dpid, mac, port):
         """Update MAC to port mapping"""
         self.mac_to_port[dpid][mac] = port

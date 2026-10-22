@@ -1,85 +1,70 @@
-from ryu.ofproto import ofproto_v1_3
-from ..utils.logger import setup_logger
-from .flow_manager import FlowManager
+"""Per-switch mitigation state with bounded OpenFlow lifetimes."""
+import ipaddress
+import time
+import zlib
 
-logger = setup_logger('policy_enforcer')
 
 class PolicyEnforcer:
-    def __init__(self, flow_manager):
+    def __init__(self, flow_manager, clock=None):
         self.flow_manager = flow_manager
-        self.blocked_ips = set()
+        self.clock = clock or time.monotonic
+        self.blocks = {}
+        self.meters = {}
         self.blocked_flows = {}
-        
+
+    @property
+    def blocked_ips(self):
+        now = self.clock()
+        self.blocks = {key: expiry for key, expiry in self.blocks.items() if expiry > now}
+        return {ip for _, ip in self.blocks}
+
     def block_ip(self, datapath, ip_address, duration=300):
-        """Block traffic from specific IP"""
-        if ip_address in self.blocked_ips:
-            logger.info(f"IP {ip_address} already blocked")
-            return
-        
-        parser = datapath.ofproto_parser
-        ofproto = datapath.ofproto
-        
-        # Block incoming traffic from this IP
-        match = parser.OFPMatch(ipv4_src=ip_address, eth_type=0x0800)
-        actions = []  # Drop packet
-        
-        self.flow_manager.install_flow(
-            datapath, 
-            priority=100,  # High priority
-            match=match, 
-            actions=actions,
-            hard_timeout=duration
-        )
-        
-        self.blocked_ips.add(ip_address)
-        logger.warning(f"Blocked IP: {ip_address} for {duration}s")
-    
+        ip_address = str(ipaddress.IPv4Address(ip_address))
+        if not 1 <= duration <= 65535:
+            raise ValueError('duration must be between 1 and 65535 seconds')
+        match = datapath.ofproto_parser.OFPMatch(eth_type=0x0800, ipv4_src=ip_address)
+        self.flow_manager.install_flow(datapath, 40000, match, [], hard_timeout=duration)
+        self.blocks[(datapath.id, ip_address)] = self.clock() + duration
+        return True
+
     def block_flow(self, datapath, flow_features):
-        """Block specific flow based on features"""
-        parser = datapath.ofproto_parser
-        
-        match_dict = {
-            'eth_type': 0x0800,
-            'ipv4_src': flow_features.get('src_ip'),
-            'ipv4_dst': flow_features.get('dst_ip')
-        }
-        
-        if flow_features.get('src_port'):
-            match_dict['ip_proto'] = flow_features.get('protocol', 6)
-            if flow_features['protocol'] == 6:  # TCP
-                match_dict['tcp_src'] = flow_features['src_port']
-            elif flow_features['protocol'] == 17:  # UDP
-                match_dict['udp_src'] = flow_features['src_port']
-        
-        match = parser.OFPMatch(**match_dict)
-        actions = []  # Drop
-        
-        self.flow_manager.install_flow(
-            datapath,
-            priority=100,
-            match=match,
-            actions=actions,
-            hard_timeout=60
-        )
-        
-        flow_key = f"{flow_features.get('src_ip')}:{flow_features.get('src_port')}"
-        self.blocked_flows[flow_key] = flow_features
-        logger.warning(f"Blocked flow: {flow_key}")
-    
-    def rate_limit_flow(self, datapath, match, max_rate_kbps):
-        """Apply rate limiting to flow"""
-        # Implementation depends on switch capabilities
-        # This is a placeholder for QoS-enabled switches
-        logger.info(f"Rate limit applied: {max_rate_kbps} kbps")
-    
+        # Cover changing source ports too. The caller checks the allowlist.
+        return self.block_ip(datapath, flow_features['src_ip'], duration=60)
+
+    def rate_limit_ip(self, datapath, ip_address, max_rate_kbps=1000, duration=300):
+        ip_address = str(ipaddress.IPv4Address(ip_address))
+        match = datapath.ofproto_parser.OFPMatch(eth_type=0x0800, ipv4_src=ip_address)
+        return self.rate_limit_flow(datapath, match, max_rate_kbps, duration, ip_address)
+
+    def rate_limit_flow(self, datapath, match, max_rate_kbps, duration=300, ip_address=None):
+        if not 1 <= int(max_rate_kbps) <= 10000000 or not 1 <= int(duration) <= 65535:
+            raise ValueError('invalid rate or duration')
+        parser, ofproto = datapath.ofproto_parser, datapath.ofproto
+        ip_address = ip_address or str(match)
+        key = (datapath.id, ip_address)
+        meter_id = zlib.crc32(ip_address.encode()) % 0xffff0000 + 1
+        command = ofproto.OFPMC_MODIFY if key in self.meters else ofproto.OFPMC_ADD
+        datapath.send_msg(parser.OFPMeterMod(
+            datapath=datapath, command=command, flags=ofproto.OFPMF_KBPS,
+            meter_id=meter_id, bands=[parser.OFPMeterBandDrop(rate=int(max_rate_kbps), burst_size=0)]))
+        self.meters[key] = meter_id
+        instructions = [
+            parser.OFPInstructionMeter(meter_id),
+            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                         [parser.OFPActionOutput(ofproto.OFPP_NORMAL)])]
+        self.flow_manager.install_flow(datapath, 30000, match, [], hard_timeout=duration,
+                                       instructions=instructions)
+        return True
+
     def unblock_ip(self, datapath, ip_address):
-        """Remove IP block"""
-        if ip_address not in self.blocked_ips:
-            return
-        
-        parser = datapath.ofproto_parser
-        match = parser.OFPMatch(ipv4_src=ip_address, eth_type=0x0800)
-        
+        ip_address = str(ipaddress.IPv4Address(ip_address))
+        parser, ofproto = datapath.ofproto_parser, datapath.ofproto
+        match = parser.OFPMatch(eth_type=0x0800, ipv4_src=ip_address)
         self.flow_manager.delete_flow(datapath, match)
-        self.blocked_ips.remove(ip_address)
-        logger.info(f"Unblocked IP: {ip_address}")
+        key = (datapath.id, ip_address)
+        self.blocks.pop(key, None)
+        meter_id = self.meters.pop(key, None)
+        if meter_id is not None:
+            datapath.send_msg(parser.OFPMeterMod(datapath=datapath, command=ofproto.OFPMC_DELETE,
+                                               flags=0, meter_id=meter_id))
+        return True

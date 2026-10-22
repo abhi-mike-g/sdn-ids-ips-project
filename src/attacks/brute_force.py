@@ -30,7 +30,8 @@ class BruteForceAttack(AttackBase):
             'administrator', 'webadmin', 'sysadmin'
         ]
     
-    def execute(self, target, service='ssh', port=None, username=None):
+    def execute(self, target, service='ssh', port=None, username=None, attempts=50):
+        self.max_attempts = max(1, int(attempts))
         """Execute brute force attack"""
         logger.info(f"Starting brute force on {target}:{service}")
         
@@ -56,6 +57,8 @@ class BruteForceAttack(AttackBase):
         
         for user in usernames:
             for password in self.passwords:
+                if results['attempts'] >= getattr(self, 'max_attempts', 50):
+                    return results
                 results['attempts'] += 1
                 
                 try:
@@ -103,6 +106,8 @@ class BruteForceAttack(AttackBase):
         
         for user in self.usernames:
             for password in self.passwords:
+                if results['attempts'] >= getattr(self, 'max_attempts', 50):
+                    return results
                 results['attempts'] += 1
                 
                 try:
@@ -140,6 +145,8 @@ class BruteForceAttack(AttackBase):
         
         for user in usernames:
             for password in self.passwords:
+                if results['attempts'] >= getattr(self, 'max_attempts', 50):
+                    return results
                 results['attempts'] += 1
                 
                 try:

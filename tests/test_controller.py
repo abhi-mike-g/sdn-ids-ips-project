@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import Mock, patch, MagicMock
-from ryu.ofproto import ofproto_v1_3
-from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
+from os_ken.ofproto import ofproto_v1_3
 
 class TestSDNController(unittest.TestCase):
     def setUp(self):
@@ -9,7 +8,8 @@ class TestSDNController(unittest.TestCase):
         self.mock_datapath = Mock()
         self.mock_datapath.id = 1
         self.mock_datapath.ofproto = ofproto_v1_3
-        self.mock_datapath.ofproto_parser = Mock()
+        from os_ken.ofproto import ofproto_v1_3_parser
+        self.mock_datapath.ofproto_parser = Mock(wraps=ofproto_v1_3_parser)
     
     def test_flow_manager_install_flow(self):
         """Test flow installation"""

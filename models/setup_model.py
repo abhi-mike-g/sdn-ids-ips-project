@@ -26,7 +26,7 @@ def setup_model():
         # Add parent directory to path
         sys.path.insert(0, str(Path(__file__).parent.parent))
         
-        from models.train_model import ModelTrainer
+        from models.train_models import ModelTrainer
         
         print("Starting model training...")
         trainer = ModelTrainer()
@@ -46,8 +46,8 @@ def setup_model():
     except Exception as e:
         print(f"✗ Failed to train model: {e}")
         print("\nTo manually train the model, run:")
-        print("  python3 models/train_model.py --synthetic --samples 10000")
+        print("  python3 models/train_models.py --synthetic --samples 10000")
         return False
 
 if __name__ == '__main__':
-    setup_model()
+    sys.exit(0 if setup_model() else 1)

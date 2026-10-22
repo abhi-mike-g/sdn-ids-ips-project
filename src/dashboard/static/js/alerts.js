@@ -3,12 +3,13 @@ class AlertsManager {
         this.currentPage = 1;
         this.pageSize = 20;
         this.alerts = [];
+        this.simulated = false;
         this.init();
     }
     
     init() {
         this.setupEventListeners();
-        this.loadAlerts();
+        fetch('/api/status').then(response => response.json()).then(data => { this.simulated = data.mode === 'offline replay'; this.loadAlerts(); }).catch(() => this.loadAlerts());
     }
     
     setupEventListeners() {
@@ -55,7 +56,7 @@ class AlertsManager {
                 }
                 if (ip) {
                     this.alerts = this.alerts.filter(a => 
-                        a.source_ip.includes(ip) || a.destination_ip.includes(ip)
+                        (a.source_ip || '').includes(ip) || (a.destination_ip || '').includes(ip)
                     );
                 }
                 this.displayAlerts();
@@ -77,23 +78,24 @@ class AlertsManager {
         let html = '';
         pageAlerts.forEach(alert => {
             const severityBadge = this.getSeverityBadge(alert.severity);
-            const status = alert.blocked ? '<span class="badge bg-danger">Blocked</span>' : 
+            const status = this.simulated ? '<span class="badge bg-info">Replay</span>' :
+                          alert.blocked ? '<span class="badge bg-danger">Blocked</span>' :
                           '<span class="badge bg-warning">Detected</span>';
             
             html += `
                 <tr>
                     <td><small>${new Date(alert.timestamp).toLocaleString()}</small></td>
                     <td>${severityBadge}</td>
-                    <td><code>${alert.type}</code></td>
-                    <td><code>${alert.source_ip}</code></td>
-                    <td><code>${alert.destination_ip}</code></td>
+                    <td><code>${escapeHTML(alert.type)}</code></td>
+                    <td><code>${escapeHTML(alert.source_ip)}</code></td>
+                    <td><code>${escapeHTML(alert.destination_ip)}</code></td>
                     <td>${alert.source_port || '-'}:${alert.destination_port || '-'}</td>
-                    <td>${alert.protocol}</td>
-                    <td><small>${alert.signature}</small></td>
+                    <td>${escapeHTML(alert.protocol)}</td>
+                    <td><small>${escapeHTML(alert.signature)}</small></td>
                     <td>${status}</td>
                     <td>
-                        <button class="btn btn-xs btn-danger" onclick="alertsManager.blockIP('${alert.source_ip}')">
-                            Block
+                        <button class="btn btn-xs btn-danger" data-block-ip="${escapeHTML(alert.source_ip)}" ${this.simulated ? 'disabled title="Replay mode does not apply live blocks"' : ''}>
+                            ${this.simulated ? 'Simulated' : 'Block'}
                         </button>
                     </td>
                 </tr>
@@ -101,6 +103,9 @@ class AlertsManager {
         });
         
         tbody.innerHTML = html;
+        tbody.querySelectorAll('[data-block-ip]').forEach(button => {
+            button.addEventListener('click', () => this.blockIP(button.dataset.blockIp));
+        });
         this.updatePagination();
     }
     
@@ -171,8 +176,8 @@ class AlertsManager {
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    alert(`IP ${ip} has been blocked for 1 hour`);
-                }
+                    alert(`Block for ${ip} submitted to ${data.switches} switches`);
+                } else { alert(data.error || 'Blocking failed'); }
             })
             .catch(e => console.error('Failed to block IP:', e));
         }
@@ -203,17 +208,24 @@ class AlertsManager {
             alert.blocked ? 'Yes' : 'No'
         ]);
         
-        return [headers, ...rows].map(row => row.join(',')).join('\n');
+        return [headers, ...rows].map(row => row.map(value => {
+            let text = String(value ?? '');
+            if (/^[=+@-]/.test(text)) text = "'" + text;
+            return '"' + text.replaceAll('"', '""') + '"';
+        }).join(',')).join('\n');
     }
     
     clearLogs() {
-        // Implementation would call backend API
-        console.log('Clearing logs...');
+        fetch('/api/alerts', {method: 'DELETE'}).then(r => {
+            if (!r.ok) throw new Error('Clear failed');
+            this.loadAlerts();
+        }).catch(error => alert(error.message));
     }
 }
 
-const alertsManager = new AlertsManager();
-
+let alertsManager;
 document.addEventListener('DOMContentLoaded', () => {
-    alertsManager.init();
+    alertsManager = new AlertsManager();
+    socket.on('new_alert', () => alertsManager.loadAlerts());
+    setInterval(() => alertsManager.loadAlerts(), 5000);
 });
